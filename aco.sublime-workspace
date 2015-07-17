@@ -1,0 +1,602 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "/C/myprojects/workspace/scard_agent/views/login.html",
+			"settings":
+			{
+				"buffer_size": 2972,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/controller/user.js",
+			"settings":
+			{
+				"buffer_size": 14904,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/route/index.js",
+			"settings":
+			{
+				"buffer_size": 2974,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"contents": "/**\n * Created by sunfuze on 15/5/14.\n */\n'use strict';\n\nvar paginationFlag = false;\nvar paginationEle;\n\nvar request = {\n\n  'get': function (url, params) {\n    return $.ajax({\n    return $.ajax({\n      url: url,\n      data: params,\n      dataType: 'json'\n    });\n  },\n\n  getTemplate: function(url) {\n    return $.ajax({\n      url: url\n    })\n  },\n\n  post: function (url, data, isMultipart) {\n\n    isMultipart = isMultipart || false;\n    var param = {\n      url: url,\n      type: 'POST',\n      dataType: 'json',\n      cache: false,\n      data: data\n    };\n\n    if(isMultipart) {\n      param.processData = false;\n      param.contentType = false;\n\n    }\n\n    return $.ajax(param);\n  },\n  del: function(url, data) {\n    var param = {\n      url: url,\n      type: 'DELETE',\n      dataType: 'json',\n      cache: false,\n      data: data || {}\n    };\n    return $.ajax(param);\n  }\n};\n\nvar wizardLabels = {\n  finish: \"完成\",\n  next: \"下一步\",\n  previous: \"上一步\",\n  loading: \"正在加载 ...\"\n};\n\n$(function () {\n\n  //批量上传设备\n  var deviceMaddForm = $('.j-device-madd-form');\n\n  deviceMaddForm.on('submit', function (e) {\n    e.preventDefault();\n\n    deviceMaddForm.find('.btn').prop('disabled', true);\n\n    var form = $(this);\n\n    request\n      .post(form.prop('action'), new FormData(this), true)\n      .done(function () {\n        showSuccessMsg('上传文件：' + form.find(':file').val() + ' 成功!');\n        deviceMaddForm[0].reset();\n        deviceMaddForm.find('.btn').prop('disabled', false);\n      })\n      .fail(function (xhr, text) {\n        if (xhr.responseJSON && xhr.responseJSON.msg) {\n          showErrorMsg(xhr.responseJSON.msg);\n        } else {\n          showErrorMsg('上传失败');\n        }\n        deviceMaddForm.find('.btn').prop('disabled', false);\n        deviceMaddForm[0].reset();\n      })\n  });\n\n  //批量上传：下载模板\n  var downLoadExample = $('.j-device-download-example');\n\n  downLoadExample.on('click', download);\n\n  //设备调拨\n  var deviceExcel = $('.j-device-file');\n  //向上级调拨\n  var allocationUpBtn = $('.j-device-allocation-up');\n  var allocationUpModal = $('.j-device-allocation-up-modal');\n  var allocationUpSteps = $('.j-device-allocation-up-wizard');\n\n  allocationUpModal.on('hidden.bs.modal', function () {\n    allocationUpSteps.steps('destroy');\n    allocationUpSteps = $('.j-device-allocation-up-wizard');\n  });\n\n  allocationUpBtn.on('click', function (e) {\n    e.preventDefault();\n\n    if (!deviceExcel.length || !deviceExcel.val()) {\n      alert('亲爱的用户，请先选择要调拨的设备文件');\n      return;\n    }\n\n    allocationUpModal.modal();\n    allocationUpSteps.steps({\n      headerTag: 'h4',\n      bodyTag: 'section',\n      transitionEffect: 'fade',\n      labels: wizardLabels,\n      onStepChanging: function (event, currentIndex, newIndex) {\n        var move = true;\n\n        if (currentIndex === 0) {\n          if (!$('.j-agent-sup-selector').length) {\n            move = false;\n            alert('没有学校数据，无法进行下一步');\n          }\n        }\n\n        return move;\n      },\n      onContentLoaded: function (event, currentIndex) {\n        console.log(\"event: %j\", event);\n      },\n      onFinishing: function (event, currentIndex) {\n\n        var agentSelector = $('.j-agent-sup-selector');\n\n        if (!agentSelector || !agentSelector.length) {\n          alert('没有学校数据，无法提交');\n          return false;\n        }\n\n        if (!deviceExcel || !deviceExcel.length || !deviceExcel[0].files || !deviceExcel[0].files.length) {\n          alert('请选择要调拨的设备excel文件');\n          return false;\n        }\n\n        var formData = new FormData();\n        var reason = $('.j-device-allocation-up-reason').val();\n        var remark = $('.j-device-allocation-up-remark').val();\n        formData.append('agentId', agentSelector.val());\n        formData.append('device', deviceExcel[0].files[0]);\n        formData.append('reason', reason);\n        formData.append('remark', remark);\n\n        disableAllocationDeviceBtn();\n\n        request\n          .post('/device/allocation/up', formData, true)\n          .done(function () {\n            allocationUpModal.modal('hide');\n            showSuccessMsg('调拨成功');\n            enableAllocationDeviceBtn();\n\n          })\n          .fail(function (xhr, text) {\n            failed(xhr, text);\n            enableAllocationDeviceBtn();\n          });\n        return true;\n      }\n    })\n\n  });\n\n  //向下级调拨\n  var allocationDownBtn = $('.j-device-allocation-down');\n  var allocationDownModal = $('.j-device-allocation-down-modal');\n  var allocationDownSteps = $('.j-device-allocation-down-wizard');\n\n  allocationDownModal.on('hidden.bs.modal', function () {\n    allocationDownSteps.steps('destroy');\n    allocationDownSteps = $('.j-device-allocation-down-wizard');\n  });\n\n  allocationDownBtn.on('click', function (e) {\n    e.preventDefault();\n\n    if (!deviceExcel.length || !deviceExcel.val()) {\n      alert('亲爱的用户，请先选择要调拨的设备文件');\n      return;\n    }\n\n    allocationDownModal.modal();\n    allocationDownSteps.steps({\n      headerTag: 'h4',\n      bodyTag: 'section',\n      transitionEffect: 'fade',\n      labels: wizardLabels,\n      onStepChanging: function (event, currentIndex, newIndex) {\n        var move = true;\n\n        if (currentIndex === 0) {\n          if (!$('.j-agent-sub-selector').length) {\n            move = false;\n            alert('没有学校数据，无法进行下一步');\n          }\n        }\n\n        return move;\n      },\n      onContentLoaded: function (event, currentIndex) {\n        console.log(\"event: %j\", event);\n      },\n      onFinishing: function (event, currentIndex) {\n\n        var agentSelector = $('.j-agent-sub-selector');\n\n        if (!agentSelector || !agentSelector.length) {\n          alert('没有学校数据，无法提交');\n          return false;\n        }\n\n        if (!deviceExcel || !deviceExcel.length || !deviceExcel[0].files || !deviceExcel[0].files.length) {\n          alert('请选择要调拨的设备excel文件');\n          return false;\n        }\n\n        var formData = new FormData();\n        var reason = $('.j-device-allocation-down-reason').val();\n        var remark = $('.j-device-allocation-down-remark').val();\n        formData.append('agentId', agentSelector.val());\n        formData.append('device', deviceExcel[0].files[0]);\n        formData.append('reason', reason);\n        formData.append('remark', remark);\n\n        disableAllocationDeviceBtn();\n\n        request\n          .post('/device/allocation/down', formData, true)\n          .done(function () {\n            allocationDownModal.modal('hide');\n            showSuccessMsg('调拨成功');\n            enableAllocationDeviceBtn();\n\n          })\n          .fail(function (xhr, text) {\n            failed(xhr, text);\n            enableAllocationDeviceBtn();\n          });\n        return true;\n      }\n    })\n  });\n\n  //出售给学校\n  var allocationSchoolBtn = $('.j-device-allocation-school');\n  var allocationSchoolModal = $('.j-device-allocation-school-modal');\n  var allocationSchoolSteps = $('.j-device-allocation-school-wizard');\n\n  allocationSchoolModal.on('hidden.bs.modal', function () {\n    allocationSchoolSteps.steps('destroy');\n    allocationSchoolSteps = $('.j-device-allocation-school-wizard');\n  });\n\n  allocationSchoolBtn.on('click', function (e) {\n    e.preventDefault();\n\n    if (!deviceExcel.length || !deviceExcel.val()) {\n      alert('亲爱的用户，请先选择要调拨的设备文件');\n      return;\n    }\n\n    allocationSchoolModal.modal();\n    allocationSchoolSteps.steps({\n      headerTag: 'h4',\n      bodyTag: 'section',\n      transitionEffect: 'fade',\n      labels: wizardLabels,\n      onStepChanging: function (event, currentIndex, newIndex) {\n        var move = true;\n\n        if (currentIndex === 0) {\n          if (!$('.j-school-selector').length) {\n            move = false;\n            alert('没有学校数据，无法进行下一步');\n          }\n        }\n\n        return move;\n      },\n      onContentLoaded: function (event, currentIndex) {\n        console.log(\"event: %j\", event);\n      },\n      onFinishing: function (event, currentIndex) {\n\n        var schoolSelector = $('.j-school-selector');\n\n        if (!schoolSelector || !schoolSelector.length) {\n          alert('没有学校数据，无法提交');\n          return false;\n        }\n\n        if (!deviceExcel || !deviceExcel.length || !deviceExcel[0].files || !deviceExcel[0].files.length) {\n          alert('请选择要调拨的设备excel文件');\n          return false;\n        }\n\n        var formData = new FormData();\n        var reason = $('.j-device-allocation-school-reason').val();\n        var remark = $('.j-device-allocation-school-remark').val();\n        formData.append('schoolId', schoolSelector.val());\n        formData.append('device', deviceExcel[0].files[0]);\n        formData.append('reason', reason);\n        formData.append('remark', remark);\n\n        disableAllocationDeviceBtn();\n\n        request\n          .post('/device/allocation/school', formData, true)\n          .done(function () {\n            allocationSchoolModal.modal('hide');\n            showSuccessMsg('出售给学校成功');\n            enableAllocationDeviceBtn();\n\n          })\n          .fail(function (xhr) {\n            if (xhr.responseJSON && xhr.responseJSON.msg) {\n              showErrorMsg(xhr.responseJSON.msg);\n            } else {\n              showErrorMsg('服务端错误，无法出售设备给学校');\n            }\n            enableAllocationDeviceBtn();\n          });\n        return true;\n      }\n    })\n  });\n\n  // update user info\n  //var userInfoForm = $('.j-user-info-form');\n  //\n  //userInfoForm.on('submit', function(e) {\n  //  e.preventDefault();\n  //\n  //\n  //\n  //})\n  //删除设备\n  $('.j-device-table').on('click', '.j-delete-device', function(e) {\n    e.preventDefault();\n\n    var me = $(this);\n    var url = me.attr('href');\n    me.attr('href', 'javascript: void(0)');\n    pleaseWaiting.show('正在删除设备...');\n    request\n      .del(url, {})\n      .then(function () {\n        pleaseWaiting.hide(100);\n        var tr = me.parents('tr');\n        tr.fadeOut(function () {\n          tr.remove();\n        });\n        showSuccessMsg('设备数据已成功删除');\n      })\n      .fail(function(xhr, text) {\n        me.attr('href', url);\n        failed(xhr, text);\n      })\n  });\n  //删除用户\n  $('.j-user-table').on('click', '.j-delete-user', function(e) {\n    e.preventDefault();\n    pleaseWaiting.show('正在删除用户...');\n    var me = $(this);\n    var url = me.attr('href');\n    me.attr('href', 'javascript: void(0)');\n    request\n      .del(url)\n      .done(function() {\n        pleaseWaiting.hide(100);\n        var tr = me.parents('tr');\n        tr.fadeOut(function () {\n          tr.remove();\n        });\n        showSuccessMsg('用户已成功删除');\n      })\n      .fail(function(xhr, text) {\n        pleaseWaiting.hide(100);\n        failed(xhr, text);\n      })\n  });\n\n\n  // 添加用户界面，选择学校\n  var schoolSelector = $('.j-school-selector');\n  var defaultSchools = [];\n  var schools = {};\n\n  if (schoolSelector.length) {\n    schoolSelector.find('option').each(function (index, option) {\n      option = $(option);\n      defaultSchools.push({id: option.val(), name: option.html()})\n    })\n  }\n\n  var agentSelector = $('.j-agent-level');\n  var levels = {};\n  if (agentSelector.length && !levels.length) {\n    request\n      .get('/agent/level')\n      .done(function (data) {\n        levels = data.levels;\n\n        var level1 = agentSelector.data('level1');\n        var level2 = agentSelector.data('level2');\n        var level3 = agentSelector.data('level3');\n        var level4 = agentSelector.data('level4');\n\n        if (levels.level1 && levels.level1.length) {\n          agentSelector.html(generateAgentSelector('level1', levels.level1));\n          if(level1 && parseInt(level1)) {\n            $('.j-agent-level1')\n              .val(level1)\n              .trigger('change');\n          }\n\n        } else if (levels.level2 && levels.level2.length) {\n          agentSelector.html(generateAgentSelector('level2', levels.level2));\n          if(level2 && parseInt(level2)) {\n            $('.j-agent-level2')\n              .val(level2)\n              .trigger('change');\n          }\n        } else if (levels.level3 && levels.level3.length) {\n          agentSelector.html(generateAgentSelector('level3', levels.level3));\n          if(level3 && parseInt(level3)) {\n            $('.j-agent-level3')\n              .val(level3)\n              .trigger('change');\n          }\n        } else if (levels.level4 && levels.level4.length) {\n          agentSelector.html(generateAgentSelector('level4', levels.level4));\n          if(level4 && parseInt(level4)) {\n            $('.j-agent-level4')\n              .val(level4)\n              .trigger('change');\n          }\n        }\n      })\n  }\n  agentSelector.on('change', '.j-agent-level1', function () {\n\n    if (paginationFlag) {\n      paginationFlag = false;\n    }\n\n    var agentId = $(this).val();\n\n    var level2Selector = $('.j-agent-level2');\n    var level3Selector = $('.j-agent-level3');\n    var level4Selector = $('.j-agent-level4');\n    if (level2Selector.length) level2Selector.remove();\n    if (level3Selector.length) level3Selector.remove();\n    if (level4Selector.length) level4Selector.remove();\n\n    if (agentId == 0) {\n      if (schoolSelector.length) {\n        setSchoolSelector(schoolSelector, defaultSchools);\n      }\n      return;\n    }\n\n    var children = getChildren(levels.level2, agentId, 'level1') || [];\n\n    var level1 = agentSelector.data('level1');\n    var level2 = agentSelector.data('level2');\n\n    if (children.length) {\n      agentSelector.append(generateAgentSelector('level2', children));\n\n      if(level1 && parseInt(level1) == agentId && level2 && parseInt(level2)) {\n        $('.j-agent-level2')\n          .val(level2)\n          .trigger('change');\n      }\n      agentSelector.data('level1', 0);\n    }\n\n    if (schoolSelector.length) {\n      if (schools[agentId]) {\n        setSchoolSelector(schoolSelector, schools[agentId]);\n      } else {\n        getSchoolOfAgent(agentId)\n          .done(function (data) {\n            schools[agentId] = data.schools;\n            schools[agentId].unshift({id: 0, name: '未选择'});\n            setSchoolSelector(schoolSelector, data.schools);\n          })\n          .fail(failed);\n      }\n    }\n\n  });\n\n  agentSelector.on('change', '.j-agent-level2', function () {\n\n    if (paginationFlag) {\n      paginationFlag = false;\n    }\n\n    var agentId = $(this).val();\n\n    var level3Selector = $('.j-agent-level3');\n    var level4Selector = $('.j-agent-level4');\n    if (level4Selector.length) level4Selector.remove();\n    if (level3Selector.length) level3Selector.remove();\n\n    if (agentId == 0) {\n      if (schoolSelector.length) {\n        setSchoolSelector(schoolSelector, schools[$('.j-agent-level1').val()]);\n      }\n      return;\n    }\n\n    var children = getChildren(levels.level3, agentId, 'level2') || [];\n\n    var level2 = agentSelector.data('level2');\n    var level3 = agentSelector.data('level3');\n\n    if (children.length) {\n      agentSelector.append(generateAgentSelector('level3', children));\n\n      if(level2 && parseInt(level2) == agentId && level3 && parseInt(level3)) {\n        $('.j-agent-level3')\n          .val(level3)\n          .trigger('change');\n      }\n      agentSelector.data('level2', 0);\n    }\n\n\n    if (schoolSelector.length) {\n      if (schools[agentId]) {\n        setSchoolSelector(schoolSelector, schools[agentId]);\n      } else {\n        getSchoolOfAgent(agentId)\n          .done(function (data) {\n            schools[agentId] = data.schools;\n            schools[agentId].unshift({id: 0, name: '未选择'});\n            setSchoolSelector(schoolSelector, data.schools);\n          })\n          .fail(failed);\n      }\n    }\n  });\n\n  agentSelector.on('change', '.j-agent-level3', function () {\n\n    if (paginationFlag) {\n      paginationFlag = false;\n    }\n\n    var agentId = $(this).val();\n\n    var level4Selector = $('.j-agent-level4');\n    if (level4Selector.length) level4Selector.remove();\n\n    if (agentId == 0) {\n      if (schoolSelector.length) {\n        setSchoolSelector(schoolSelector, schools[$('.j-agent-level2')]);\n      }\n      return;\n    }\n\n    var path = window.location.pathname;\n    if(path == '/agent/add' || /^\\/agent\\/[0-9]+$/.test(path)) {\n      return;\n    }\n\n    var children = getChildren(levels.level4, agentId, 'level3') || [];\n\n    var level3 = agentSelector.data('level3');\n    var level4 = agentSelector.data('level4');\n\n    if (children.length) {\n      agentSelector.append(generateAgentSelector('level4', children));\n\n      if(level3 && parseInt(level3) == agentId && level4 && parseInt(level4)) {\n        $('.j-agent-level4')\n          .val(level3)\n          .trigger('change');\n      }\n      agentSelector.data('level3', 0);\n    }\n\n    if (schoolSelector.length) {\n      if (schools[agentId]) {\n        setSchoolSelector(schoolSelector, schools[agentId]);\n      } else {\n        getSchoolOfAgent(agentId)\n          .done(function (data) {\n            schools[agentId] = data.schools;\n            schools[agentId].unshift({id: 0, name: '未选择'});\n            setSchoolSelector(schoolSelector, data.schools);\n          })\n          .fail(failed);\n      }\n    }\n  });\n\n  agentSelector.on('change', '.j-agent-level4', function () {\n\n    if (paginationFlag) {\n      paginationFlag = false;\n    }\n\n    var agentId = $(this).val();\n    if (agentId == 0) {\n      if (schoolSelector.length) {\n        setSchoolSelector(schoolSelector, schools[$('.j-agent-level3')]);\n      }\n      return;\n    }\n\n    if (schoolSelector.length) {\n      if (schools[agentId]) {\n        setSchoolSelector(schoolSelector, schools[agentId]);\n      } else {\n        getSchoolOfAgent(agentId)\n          .done(function (data) {\n            schools[agentId] = data.schools;\n            schools[agentId].unshift({id: 0, name: '未选择'});\n            setSchoolSelector(schoolSelector, data.schools);\n          })\n          .fail(failed);\n      }\n    }\n  });\n\n  var subAgentSelector = $('.j-agent-sub');\n\n  if (subAgentSelector.length) {\n    request\n      .get('/agent/sub')\n      .done(function (data) {\n        if (data.agents && data.agents.length) {\n          var htmlArray = ['<select class=\"form-control\" name=\"' + data.level + '\">'];\n          htmlArray.push('<option value=\"0\">未选择</option>');\n          htmlArray = htmlArray.concat(generateAgentOptions(data.agents));\n          htmlArray.push('</select>');\n          subAgentSelector.html(htmlArray.join('\\n'));\n        }\n      })\n  }\n\n  var queryOwnAgentSubBtn = $('.j-agent-query-own-sub');\n  queryOwnAgentSubBtn.on('click', function (e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    queryAgent(me, 'own');\n\n  });\n\n  var queryAllAgentSubBtn = $('.j-agent-query-sub');\n  queryAllAgentSubBtn.on('click', function (e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    queryAgent(me, 'all');\n  });\n\n  var queryAgentAccurateBtn = $('.j-agent-accurate');\n  queryAgentAccurateBtn.on('click', function (e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    queryAgent(me, 'accurate');\n  });\n\n  var querySchoolOwnBtn = $('.j-school-query-own');\n  querySchoolOwnBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    querySchool(me, 'own');\n  });\n\n  var querySchoolAllBtn = $('.j-school-query-all');\n  querySchoolAllBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    querySchool(me, 'all');\n  });\n\n  var querySchoolAccurateBtn = $('.j-school-query-accurate');\n  querySchoolAccurateBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n\n    paginationFlag = false;\n    querySchool(me, 'accurate');\n  });\n\n  var queryDeviceOwnBtn = $('.j-device-query-own');\n  queryDeviceOwnBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me =$(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    queryDevice(me, 'own');\n  });\n\n  var queryDeviceAllBtn = $('.j-device-query-all');\n  queryDeviceAllBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me =$(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    queryDevice(me, 'all');\n  });\n\n  var queryDeviceAccurate = $('.j-device-query-accurate');\n  queryDeviceAccurate.on('click', function(e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    queryDevice(me, 'accurate');\n  });\n\n  var querySDeviceOwnBtn = $('.j-sdevice-query-own');\n  querySDeviceOwnBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me =$(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    querySDevice(me, 'own');\n  });\n\n  var querySDeviceAllBtn = $('.j-sdevice-query-all');\n  querySDeviceAllBtn.on('click', function(e) {\n    e.preventDefault();\n\n    var me =$(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    querySDevice(me, 'all');\n  });\n\n  var querySDeviceAccurate = $('.j-sdevice-query-accurate');\n  querySDeviceAccurate.on('click', function(e) {\n    e.preventDefault();\n\n    var me = $(this);\n    me.prop('disabled', true);\n    paginationFlag = false;\n    querySDevice(me, 'accurate');\n\n  });\n\n	//添加管理员\n	$(\".z-user-add\").click(function(e){\n		if($(\"[name='account']\").val()!=\"\"&&$(\"#z-agent p\").html()!=\"\") {\n      if (confirm(\"确定要为【\" + $(\"#z-agent p\").html() + \"】\\n新增一位管理员\" + $(\"[name='account']\").val() + \"吗？\")) {\n      } else {\n        e.preventDefault();\n      }\n    }\n	});\n\n  //删除学校\n\n  var deleteSchoolModal = $('.j-school-delete-modal');\n  $('.j-school-table').on('click', '.j-delete-school', function(e) {\n    e.preventDefault();\n    var me = $(this);\n    var url = me.attr('href');\n\n    deleteSchoolModal.modal();\n    var deleteSchoolConfirmBtn = $('.j-school-delete-confirm');\n    deleteSchoolConfirmBtn.unbind('click');\n\n    deleteSchoolConfirmBtn.on('click', function (e) {\n      e.preventDefault();\n      pleaseWaiting.show('正在删除数据...');\n      request.del(url, {})\n        .then(function () {\n          pleaseWaiting.hide(100);\n          var tr = me.parents('tr');\n          tr.fadeOut(function () {\n            tr.remove();\n          });\n          showSuccessMsg('学校已成功删除');\n        })\n        .fail(function (xhr, text) {\n          pleaseWaiting.hide(100);\n          failed(xhr, text);\n        })\n    })\n  });\n  //删除代理商\n  var deleteAgentModal = $('.j-agent-delete-modal');\n  $('.j-agent-table').on('click', '.j-delete-agent', function(e) {\n    e.preventDefault();\n    var me = $(this);\n    var url = me.attr('href');\n\n    deleteAgentModal.modal();\n    var deleteAgentConfirmBtn = $('.j-agent-delete-confirm');\n    deleteAgentConfirmBtn.unbind('click');\n    deleteAgentConfirmBtn.on('click', function (e) {\n      e.preventDefault();\n      pleaseWaiting.show('正在删除数据...');\n      request.del(url, {})\n        .then(function (data) {\n          pleaseWaiting.hide(100);\n          var tr = me.parents('tr');\n          tr.fadeOut(function () {\n            tr.remove();\n          });\n\n          var agent = data.agent;\n\n          var index = 0;\n\n          for(var i = 0, len = levels['level' + agent.level]; i < len; i ++) {\n            var a = levels['level' + agent.level][i];\n            if(a.id == agent.id) {\n              index = i;\n              break;\n            }\n          }\n\n          levels['level' + agent.level].splice(index, 1);\n\n          var supLevel = parseInt(agent.level);\n\n          if(supLevel > 0) {\n            var supLevelSelect = $('.j-agent-level' + supLevel);\n            if(supLevelSelect && supLevelSelect.length) {\n              var currentVal = supLevelSelect.val();\n              supLevelSelect.val(currentVal).trigger('change');\n            }\n          }\n\n          var curOption = $('.j-agent-level' + agent.level + ' option[value=\"' + agent.id + '\"]');\n\n          if(curOption && curOption.length) {\n            curOption.remove();\n          }\n          showSuccessMsg('代理商已成功删除');\n        })\n        .fail(function (xhr, text) {\n          pleaseWaiting.hide(100);\n          failed(xhr, text);\n        })\n    })\n  });\n});\n\nfunction querySDevice($selector, type) {\n\n  //if(queryDevice.type != type) {\n  //  paginationFlag = false;\n  //  queryDevice.type = type;\n  //}\n\n  var level1Selector = $('.j-agent-level1');\n  var level2Selector = $('.j-agent-level2');\n  var level3Selector = $('.j-agent-level3');\n  var level4Selector = $('.j-agent-level4');\n  var schoolSelector = $('.j-school-selector');\n  var imei = $('.j-device-imei');\n  var phone = $('.j-device-phone');\n\n  var isAssigned = $('.j-device-have-student');\n  var isBound = $('.j-device-bind');\n\n  var query = {type: type};\n\n  if(type == 'accurate') {\n    if(imei.val()) {\n      query.imei = imei.val();\n    }\n\n    if(phone.val()) {\n      query.phone = phone.val();\n    }\n\n    if(!query.imei && !query.phone) {\n      $selector.prop('disabled', false);\n      return ;\n    }\n  } else {\n\n    if(level1Selector && level1Selector.length) {\n      query.level1 = level1Selector.val();\n    }\n    if(level2Selector && level2Selector.length) {\n      query.level2 = level2Selector.val();\n    }\n    if(level3Selector && level3Selector.length) {\n      query.level3 = level3Selector.val();\n    }\n    if(level4Selector && level4Selector.val()) {\n      query.level4 = level4Selector.val();\n    }\n\n    if(isAssigned.val()) {\n      query.isAssigned = isAssigned.val();\n    }\n    if(isBound.val()) {\n      query.isBound = isBound.val();\n    }\n\n    if(schoolSelector.val()) {\n      query.schoolId = schoolSelector.val();\n    }\n  }\n  pleaseWaiting.show();\n  request\n    .get('/sdevice', query)\n    .done(function(data) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      renderSDeviceTable(data, query);\n\n    })\n    .fail(function(xhr, text) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      failed(xhr, text);\n    })\n}\n\nfunction queryDevice($selector, type) {\n\n  if(queryDevice.type != type) {\n    paginationFlag = false;\n    queryDevice.type = type;\n  }\n\n  var level1Selector = $('.j-agent-level1');\n  var level2Selector = $('.j-agent-level2');\n  var level3Selector = $('.j-agent-level3');\n  var level4Selector = $('.j-agent-level4');\n\n  var imei = $('.j-device-imei');\n\n  var query = {type: type};\n\n  if(type == 'accurate') {\n    if(imei.val()) {\n      query.imei = imei.val();\n    } else {\n      $selector.prop('disabled', false);\n      return;\n    }\n\n  } else {\n\n    if(level1Selector && level1Selector.length) {\n      query.level1 = level1Selector.val();\n    }\n    if(level2Selector && level2Selector.length) {\n      query.level2 = level2Selector.val();\n    }\n    if(level3Selector && level3Selector.length) {\n      query.level3 = level3Selector.val();\n    }\n    if(level4Selector && level4Selector.val()) {\n      query.level4 = level4Selector.val();\n    }\n  }\n  pleaseWaiting.show('正在加载设备数据...');\n  request\n    .get('/device', query)\n    .done(function(data) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      renderDeviceTable(data, query);\n\n    })\n    .fail(function(xhr, text) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      failed(xhr, text);\n    })\n}\n\n\nfunction queryAgent( $selector, type) {\n\n  pleaseWaiting.show('正在加载代理商数据...');\n\n  //if(queryAgent.type != type) {\n  //  paginationFlag = false;\n  //  queryAgent.type = type;\n  //}\n\n  var level1Selector = $('.j-agent-level1');\n  var level2Selector = $('.j-agent-level2');\n  var level3Selector = $('.j-agent-level3');\n  var level4Selector = $('.j-agent-level4');\n\n  var agentName = $('.j-agent-name');\n  var agentContacts = $('.j-agent-contacts');\n\n  var query = {type: type};\n\n  if(type == 'accurate') {\n    if(agentName.val()) {\n      query.name = agentName.val();\n    }\n\n    if(agentContacts.val()) {\n      query.contacts = agentContacts.val();\n    }\n\n  } else {\n\n    if(level1Selector && level1Selector.length) {\n      query.level1 = level1Selector.val();\n    }\n    if(level2Selector && level2Selector.length) {\n      query.level2 = level2Selector.val();\n    }\n    if(level3Selector && level3Selector.length) {\n      query.level3 = level3Selector.val();\n    }\n    if(level4Selector && level4Selector.val()) {\n      query.level4 = level4Selector.val();\n    }\n  }\n\n  request\n    .get('/agent', query)\n    .done(function(data) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      renderAgentTable(data, query);\n\n    })\n    .fail(function(xhr, text) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      failed(xhr, text);\n    })\n}\n\nfunction querySchool($selector, type) {\n\n  pleaseWaiting.show('正在加载数据...');\n\n  //if(querySchool.type != type) {\n  //  paginationFlag = false;\n  //  querySchool.type = type;\n  //}\n\n  var level1Selector = $('.j-agent-level1');\n  var level2Selector = $('.j-agent-level2');\n  var level3Selector = $('.j-agent-level3');\n  var level4Selector = $('.j-agent-level4');\n\n  var schoolName = $('.j-school-name');\n  var schoolAddress = $('.j-school-address');\n\n  var query = {type: type};\n\n  if(type == 'accurate') {\n\n    if(schoolName.val()) {\n      query.name = schoolName.val();\n    }\n\n    if(schoolAddress.val()) {\n      query.address = schoolAddress.val();\n    }\n\n  } else {\n\n    if(level1Selector && level1Selector.length) {\n      query.level1 = level1Selector.val();\n    }\n    if(level2Selector && level2Selector.length) {\n      query.level2 = level2Selector.val();\n    }\n    if(level3Selector && level3Selector.length) {\n      query.level3 = level3Selector.val();\n    }\n    if(level4Selector && level4Selector.val()) {\n      query.level4 = level4Selector.val();\n    }\n  }\n\n  request\n    .get('/school', query)\n    .done(function(data) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      renderSchoolTable(data, query);\n    })\n    .fail(function(xhr, text) {\n      $selector.prop('disabled', false);\n      pleaseWaiting.hide();\n      failed(xhr, text);\n    })\n}\n\nfunction renderSDeviceTable(data, query) {\n  var $pagination = $('.j-pagination');\n\n  if(!paginationFlag) {\n    if(paginationEle) {\n      $pagination.data('twbs-pagination', '');\n      $pagination.html('');\n    }\n\n    generatePagination($pagination, data.total, data.page || 1, onPageClick.bind(null, query, '/sdevice', renderSDeviceTable));\n  }\n\n  generateSDeviceList(data);\n}\n\nfunction renderDeviceTable(data, query) {\n  var $pagination = $('.j-pagination');\n\n  if(!paginationFlag) {\n    if(paginationEle) {\n      $pagination.data('twbs-pagination', '');\n      $pagination.html('');\n    }\n\n    generatePagination($pagination, data.total, data.page || 1, onPageClick.bind(null, query, '/device', renderDeviceTable));\n  }\n  generateDeviceList(data);\n}\n\nfunction renderSchoolTable(data, query) {\n  var $pagination = $('.j-pagination');\n\n  if(!paginationFlag) {\n\n    if(paginationEle) {\n      $pagination.data('twbs-pagination', '');\n      $pagination.html('');\n    }\n\n    generatePagination($pagination, data.total, data.page || 1, onPageClick.bind(null, query, '/school', renderSchoolTable))\n  }\n  generateSchoolList(data);\n}\n\n\nfunction renderAgentTable(data, query) {\n\n  var $pagination = $('.j-pagination');\n\n  if(!paginationFlag) {\n\n    if(paginationEle) {\n      $pagination.data('twbs-pagination', '');\n      $pagination.html('');\n    }\n\n    generatePagination($pagination, data.total, data.page || 1, onPageClick.bind(null, query, '/agent', renderAgentTable))\n  }\n  generateAgentList(data);\n}\n\nfunction onPageClick(query, url, render, event, page) {\n  event.preventDefault();\n  query.page = page;\n\n  pleaseWaiting.show('正在加载数据...');\n\n  request\n    .get(url, query)\n    .done(function(data) {\n      pleaseWaiting.hide();\n      render(data, query);\n\n    })\n    .fail(function() {\n      pleaseWaiting.hide();\n      failed([].slice.apply(arguments));\n    })\n}\n\nfunction generateSDeviceList(data) {\n\n  var template = TEMPLATE_CACHE.device_slist;\n\n  if(template) {\n    var html = ejs.render(template, data);\n    $('.j-device-table').html(html);\n    return;\n  }\n\n  request\n    .getTemplate(TEMPLATE_CONFIG.device_slist)\n    .done(function(template) {\n      TEMPLATE_CACHE.device_slist = template;\n      var html = ejs.render(template, data);\n      $('.j-device-table').html(html)\n    })\n    .fail(failed);\n}\n\nfunction generateDeviceList(data) {\n\n  var template = TEMPLATE_CACHE.device_list;\n\n  if(template) {\n    var html = ejs.render(template, data);\n    $('.j-device-table').html(html);\n    return;\n  }\n\n  request\n    .getTemplate(TEMPLATE_CONFIG.device_list)\n    .done(function(template) {\n      TEMPLATE_CACHE.device_list = template;\n      var html = ejs.render(template, data);\n      $('.j-device-table').html(html)\n    })\n    .fail(failed);\n}\n\nfunction generateAgentList(data) {\n\n  var template = TEMPLATE_CACHE.agent_list;\n\n  if(template) {\n    var html = ejs.render(template, data);\n    $('.j-agent-table').html(html);\n    return;\n  }\n\n  request\n    .getTemplate(TEMPLATE_CONFIG.agent_list)\n    .done(function(template) {\n      TEMPLATE_CACHE.agent_list = template;\n      var html = ejs.render(template, data);\n      $('.j-agent-table').html(html);\n    })\n    .fail(failed);\n}\n\nfunction generateSchoolList(data) {\n\n  var template = TEMPLATE_CACHE.school_list;\n\n  if(template) {\n    var html = ejs.render(template, data);\n    $('.j-school-table').html(html);\n    return;\n  }\n\n  request\n    .getTemplate(TEMPLATE_CONFIG.school_list)\n    .done(function(template) {\n      TEMPLATE_CACHE.school_list = template;\n      var html = ejs.render(template, data);\n      $('.j-school-table').html(html);\n    })\n    .fail(failed);\n}\n\nfunction setSchoolSelector(selector, schools) {\n  var options = schools.map(function(school) {\n    return '<option value=\"' + school.id + '\">' + school.name + '</option>';\n  });\n  selector.html(options.join('\\n'));\n}\n\nfunction getSchoolOfAgent(agentId) {\n  return request.get('/agent/' + agentId + '/school');\n}\n\nfunction getChildren(agents, id, level) {\n\n  if(!agents || !agents.length) {\n    return [];\n  }\n\n  return agents.filter(function(agent) {\n    return agent[level] == id;\n  })\n}\n\nfunction generateAgentOptions(agents) {\n  return agents.map(function(agent) {\n    return '<option value=\"' + agent.id + '\">' + agent.name + '</option>'\n  })\n}\n\nfunction failed(xhr, text) {\n  if(xhr.responseJSON && xhr.responseJSON.msg) {\n    showErrorMsg(xhr.responseJSON.msg);\n  } else {\n    showErrorMsg(text);\n  }\n}\n\nfunction resetDeviceFile() {\n  $('.j-device-file').val('');\n}\n\nfunction disableAllocationDeviceBtn() {\n  var allocationSchoolBtn = $('.j-device-allocation-school');\n  var allocationUpBtn = $('.j-device-allocation-up');\n  var allocationDownBtn = $('.j-device-allocation-down');\n\n  allocationDownBtn.prop('disabled', true);\n  allocationUpBtn.prop('disabled', true);\n  allocationSchoolBtn.prop('disabled', true);\n}\n\nfunction enableAllocationDeviceBtn() {\n  var allocationSchoolBtn = $('.j-device-allocation-school');\n  var allocationUpBtn = $('.j-device-allocation-up');\n  var allocationDownBtn = $('.j-device-allocation-down');\n\n  allocationDownBtn.prop('disabled', false);\n  allocationUpBtn.prop('disabled', false);\n  allocationSchoolBtn.prop('disabled', false);\n\n}\n\nfunction showErrorMsg(message) {\n\n  message = message || '';\n\n  closeMsg();\n  $('body').append('<div class=\"alert alert-warning alert-dismissible fade in error-message text-center\" role=\"alert\">\\n' +\n    '<button type=\"button\" class=\"close\" data-dismiss=\"alert\" aria-label=\"Close\"><span aria-hidden=\"true\">×</span></button>' +\n    '<strong>错误!</strong>&nbsp;' + message +\n    '</div>');\n\n  setTimeout(closeErrorMsg, 15000);\n}\n\nfunction showSuccessMsg(message) {\n\n  message = message || '';\n\n  closeMsg();\n  $('body').append('<div class=\"alert alert-success alert-dismissible fade in success-message text-center\" role=\"alert\">\\n' +\n    '<button type=\"button\" class=\"close\" data-dismiss=\"alert\" aria-label=\"Close\"><span aria-hidden=\"true\">×</span></button>' +\n    '<strong>成功!</strong>&nbsp;' + message +\n    '</div>');\n\n  setTimeout(closeSuccessMsg, 3000);\n}\n\nfunction closeMsg() {\n  closeErrorMsg();\n  closeSuccessMsg();\n}\n\nfunction closeErrorMsg() {\n\n  var errorMsg = $('.error-message');\n  if (errorMsg.length) {\n    errorMsg.alert('close');\n  }\n}\n\nfunction closeSuccessMsg() {\n  var successMsg = $('.success-message');\n\n  if (successMsg.length) {\n    successMsg.alert('close');\n  }\n}\n\nfunction generateAgentSelector(level, agents) {\n\n  var clss = \"form-control j-agent-\" + level;\n\n  var htmlString = [\n    '<select class=\"'+ clss + '\" name=\"' + level + '\">',\n    '<option value=\"0\">未选择</option>']\n    .concat(generateAgentOptions(agents));\n  htmlString.push('</select>');\n\n  return htmlString.join('\\n');\n}\n\nfunction generatePagination(selector, count, startPage, onClick) {\n  paginationFlag = true;\n  // reset page event\n  selector.unbind('page');\n  count = count || 1;\n\n  paginationEle = selector.twbsPagination({\n    totalPages: count,\n    visiblePages: 5,\n    startPage: startPage,\n    paginationClass: 'pagination-sm pagination',\n    onPageClick: onClick,\n    first: '首页',\n    last: '最后',\n    next: '下一页',\n    prev: '上一页'\n  })\n}\n\nfunction download(e) {\n  e.preventDefault();\n  var $this = $(this);\n  $this.prop('disabled', true);\n\n  request.get($this.prop('href'), {})\n    .done(function (data) {\n      $this.prop('disabled', false);\n      window.open(data.redirect);\n    })\n    .fail(function (xhr, text) {\n      $this.prop('disabled', false);\n      failed(xhr, text);\n    })\n}\n\n//2015-6-7 hzw.添加新功能********************************\n\n$(function () {\n\n //增加代理\n  $(\"#z-agent-add-direct\").load(mockAjax);\n\n  //修改代理\n  $(\"#z-agent-detail-direct\").load(mockAjax);\n  //增加设备\n  $(\"#z-device-add-direct\").load(mockAjax);\n\n  //增加管理员\n  $(\"#z-user-add-direct\").load(mockAjax);\n  //修改个人信息\n  $(\"#z-user-info-direct\").load(mockAjax);\n\n  //修改代理商管理员信息\n  $('#z-user-modify-direct').load(mockAjax);\n\n  //添加学校\n  $('#z-school-add-direct').load(mockAjax);\n  //修改学校\n  $('#z-school-modify-direct').load(mockAjax);\n\n  //修改设备\n  $('#z-device-detail-direct').load(mockAjax);\n\n  //修改学校管理员信息\n  $('#z-school-user-modify-direct').load(mockAjax);\n\n  function mockAjax() {\n    var resultData = zIframeXm(this.id);\n    \n    if(resultData.error) {\n      showErrorMsg(resultData.msg);\n    } else {\n      showSuccessMsg(resultData.msg);\n      //成功清空表单\n      $('.formneedreset').each(function(){\n        this.reset();\n      });\n    }\n  }\n\n});\n\n//获取iframe加载信息\nfunction zIframeXm(id) {\n  var io = document.getElementById(id);\n  var xml = {};\n  if (io.contentWindow) {\n    xml.responseText = io.contentWindow.document.body ? io.contentWindow.document.body.innerHTML : null;\n    xml.responseXML = io.contentWindow.document.XMLDocument ? io.contentWindow.document.XMLDocument : io.contentWindow.document;\n\n  } else if (io.contentDocument) {\n    xml.responseText = io.contentDocument.document.body ? io.contentDocument.document.body.innerHTML : null;\n    xml.responseXML = io.contentDocument.document.XMLDocument ? io.contentDocument.document.XMLDocument : io.contentDocument.document;\n  }\n  var resultData;\n  try {\n    eval(\"resultData=\" + xml.responseText.slice(xml.responseText.indexOf(\">\") + 1, xml.responseText.indexOf(\"</\")));\n    return resultData;\n  } catch (e) {\n    console.log(e.msg);\n    return resultData;\n  }\n}\n\n//please waiting dialog\n\nvar pleaseWaiting = {\n  dialog: $('#pleaseWaitDialog'),\n  show: function(msg) {\n\n    $('.j-waiting-msg').html(msg);\n\n    this.dialog.modal({keyboard: false});\n  },\n  hide: function(time) {\n    //this.dialog.modal('hide');\n    setTimeout(function() {\n      this.dialog.modal('hide');\n    }.bind(this), parseInt(time) || 300)\n  }\n};\n\n\n",
+			"file": "/C/myprojects/workspace/scard_agent/assets/dist/js/zhanhua.js",
+			"file_size": 41958,
+			"file_write_time": 130794245234014965,
+			"settings":
+			{
+				"buffer_size": 39470,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/assets/dist/js/login.js",
+			"settings":
+			{
+				"buffer_size": 2466,
+				"line_ending": "Windows",
+				"name": "x"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/views/agent-add.html",
+			"settings":
+			{
+				"buffer_size": 4793,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/views/foot.html",
+			"settings":
+			{
+				"buffer_size": 2438,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/assets/dist/css/zhanhua.css",
+			"settings":
+			{
+				"buffer_size": 743,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/views/head.html",
+			"settings":
+			{
+				"buffer_size": 7052,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/assets/dist/css/login.css",
+			"settings":
+			{
+				"buffer_size": 111,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/service/redis.js",
+			"settings":
+			{
+				"buffer_size": 971,
+				"line_ending": "Windows"
+			}
+		},
+		{
+			"file": "/C/myprojects/workspace/scard_agent/package.json",
+			"settings":
+			{
+				"buffer_size": 941,
+				"line_ending": "Windows"
+			}
+		}
+	],
+	"build_system": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 0.0
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"file_history":
+	[
+		"/C/myprojects/workspace/scard_agent/middleware/index.js",
+		"/C/myprojects/workspace/scard_agent/package.json",
+		"/C/myprojects/workspace/scard_agent/assets/dist/css/zhanhua.css",
+		"/C/myprojects/workspace/scard_agent/controller/agent.js",
+		"/C/myprojects/workspace/scard_agent/views/agent-add.html",
+		"/C/myprojects/workspace/scard_agent/assets/dist/js/zhanhua.js",
+		"/C/myprojects/workspace/scard_agent/views/school-add.html",
+		"/C/myprojects/workspace/scard_agent/views/agent-detail.html",
+		"/C/myprojects/workspace/scard_agent/views/school-detail.html",
+		"/C/myprojects/workspace/scard_agent/views/device-add.html",
+		"/C/myprojects/workspace/scard_agent/views/user-add.html",
+		"/C/myprojects/workspace/scard_agent/views/device-madd.html",
+		"/C/myprojects/workspace/scard_agent/route/index.js",
+		"/C/myprojects/workspace/scard_agent/service/agent.js",
+		"/C/myprojects/workspace/scard_agent/app.js",
+		"/C/mygitrepos/scard_agent/route/index.js",
+		"/C/mygitrepos/scard_agent/package.json",
+		"/C/mygitrepos/scard_agent/app.js"
+	],
+	"find":
+	{
+		"height": 36.0
+	},
+	"find_in_files":
+	{
+		"height": 0.0,
+		"where_history":
+		[
+			"C:\\myprojects\\workspace\\scard_agent"
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"showSuccessMsg",
+			"debugger",
+			"z-agent-add-direct",
+			"添加代理商成功",
+			"%;*/\n",
+			"添加代理商成功",
+			".form-inline select.form-control",
+			"用户名或密码",
+			"msg",
+			"get",
+			"m",
+			"msg",
+			"msg:"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"selected": 11,
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "/C/myprojects/workspace/scard_agent/views/login.html",
+					"settings":
+					{
+						"buffer_size": 2972,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								672,
+								672
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/HTML/HTML.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "/C/myprojects/workspace/scard_agent/controller/user.js",
+					"settings":
+					{
+						"buffer_size": 14904,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								909,
+								909
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JavaScript.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 280.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "/C/myprojects/workspace/scard_agent/route/index.js",
+					"settings":
+					{
+						"buffer_size": 2974,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								419,
+								419
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JavaScript.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 240.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "/C/myprojects/workspace/scard_agent/assets/dist/js/zhanhua.js",
+					"settings":
+					{
+						"buffer_size": 39470,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								35024,
+								36534
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JavaScript.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 27762.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "/C/myprojects/workspace/scard_agent/assets/dist/js/login.js",
+					"settings":
+					{
+						"buffer_size": 2466,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								2381,
+								2381
+							]
+						],
+						"settings":
+						{
+							"auto_name": "x",
+							"syntax": "Packages/Text/Plain text.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 1686.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "/C/myprojects/workspace/scard_agent/views/agent-add.html",
+					"settings":
+					{
+						"buffer_size": 4793,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								749,
+								749
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/HTML/HTML.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 6,
+					"file": "/C/myprojects/workspace/scard_agent/views/foot.html",
+					"settings":
+					{
+						"buffer_size": 2438,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								2039,
+								2105
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/HTML/HTML.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 673.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 7,
+					"file": "/C/myprojects/workspace/scard_agent/assets/dist/css/zhanhua.css",
+					"settings":
+					{
+						"buffer_size": 743,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								253,
+								144
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/CSS/CSS.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 60.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 8,
+					"file": "/C/myprojects/workspace/scard_agent/views/head.html",
+					"settings":
+					{
+						"buffer_size": 7052,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1249,
+								1319
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/HTML/HTML.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 180.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 9,
+					"file": "/C/myprojects/workspace/scard_agent/assets/dist/css/login.css",
+					"settings":
+					{
+						"buffer_size": 111,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								111,
+								111
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/CSS/CSS.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 10,
+					"file": "/C/myprojects/workspace/scard_agent/service/redis.js",
+					"settings":
+					{
+						"buffer_size": 971,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								253,
+								253
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JavaScript.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 11,
+					"file": "/C/myprojects/workspace/scard_agent/package.json",
+					"settings":
+					{
+						"buffer_size": 941,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								494,
+								494
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/JSON.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 60.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 0.0
+	},
+	"input":
+	{
+		"height": 36.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"replace":
+	{
+		"height": 0.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 500.0,
+		"selected_items":
+		[
+		],
+		"width": 380.0
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 193.0,
+	"status_bar_visible": true
+}
