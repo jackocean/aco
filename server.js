@@ -6,4 +6,5 @@ http.createServer(function(request, response) {
   debugger
   console.log('debugging');
   response.end();
+  debugger
 }).listen(8888);
